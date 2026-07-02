@@ -109,7 +109,7 @@ export function useJobs() {
         return false;
       }
       const salary = job.salaryMax ?? job.salaryMin ?? 0;
-      if (filters.minSalary > 0 && salary > 0 && salary < filters.minSalary) return false;
+      if (filters.minSalary > 0 && salary < filters.minSalary) return false;
       if (
         filters.skills.length > 0 &&
         !filters.skills.every((skill) => job.extractedSkills.includes(skill))

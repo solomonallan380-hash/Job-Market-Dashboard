@@ -54,13 +54,33 @@ const RESPONSE_SCHEMA = {
   additionalProperties: false,
 };
 
+const EXPERIENCE_RULES: Array<[ExperienceLevel, RegExp]> = [
+  [
+    "entry",
+    /\b(entry[- ]level|junior|jr\.?|intern(ship)?|new grad(uate)?|associate|trainee|apprentice)\b/i,
+  ],
+  [
+    "senior",
+    /\b(senior|sr\.?|lead|principal|staff|director|head of|architect|vp|chief)\b/i,
+  ],
+  ["mid", /\b(mid[- ]level|mid[- ]senior|intermediate)\b/i],
+];
+
+function inferExperienceLevel(title: string, description: string): ExperienceLevel {
+  const text = `${title} ${description}`;
+  for (const [level, pattern] of EXPERIENCE_RULES) {
+    if (pattern.test(text)) return level;
+  }
+  return "unknown";
+}
+
 function keywordFallback(job: RawJob): ClaudeEnrichment {
   const hasListedSalary = Boolean(job.listedSalaryMin || job.listedSalaryMax);
   return {
     salaryMin: job.listedSalaryMin,
     salaryMax: job.listedSalaryMax,
     salaryCurrency: hasListedSalary ? "USD" : null,
-    experienceLevel: "unknown",
+    experienceLevel: inferExperienceLevel(job.title, job.description),
     experienceReasoning: null,
     extractedSkills: matchSkillsByKeyword(job.description),
   };
