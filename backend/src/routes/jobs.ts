@@ -56,8 +56,10 @@ jobsRouter.post("/jobs/refresh", async (_req, res) => {
     results.forEach((result, i) => {
       const sourceName = ["remoteok", "themuse", "adzuna"][i];
       if (result.status === "fulfilled") {
+        console.log(`[refresh] ${sourceName}: ${result.value.length} raw jobs (pre-filter)`);
         rawJobs.push(...result.value);
       } else {
+        console.error(`[refresh] ${sourceName} failed:`, result.reason);
         sourceErrors.push(`${sourceName}: ${(result.reason as Error).message}`);
       }
     });
@@ -67,6 +69,9 @@ jobsRouter.post("/jobs/refresh", async (_req, res) => {
     // is deduplicated, enriched, or stored.
     const cleanedJobs = rawJobs.map(fixJobTextEncoding);
     const relevantJobs = filterRelevantJobs(cleanedJobs);
+    console.log(
+      `[refresh] ${rawJobs.length} raw jobs total -> ${relevantJobs.length} passed relevance filter`
+    );
 
     const idsBySourceId = new Map<RawJob, string>();
     for (const job of relevantJobs) {
