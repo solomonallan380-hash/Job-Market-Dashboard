@@ -4,7 +4,7 @@ import { fetchTheMuseJobs } from "../sources/themuse.js";
 import { fetchAdzunaJobs } from "../sources/adzuna.js";
 import { enrichJobs } from "../enrichment/claude.js";
 import { computeMatchScore } from "../scoring/matchScore.js";
-import { buildJobId, jobStore } from "../cache/jobStore.js";
+import { buildJobId, dedupeAcrossSources, jobStore } from "../cache/jobStore.js";
 import { isAdzunaConfigured, isClaudeConfigured } from "../config.js";
 import { filterRelevantJobs } from "../filters/relevanceFilter.js";
 import { fixJobTextEncoding } from "../utils/textEncoding.js";
@@ -69,16 +69,18 @@ jobsRouter.post("/jobs/refresh", async (_req, res) => {
     // is deduplicated, enriched, or stored.
     const cleanedJobs = rawJobs.map(fixJobTextEncoding);
     const relevantJobs = filterRelevantJobs(cleanedJobs);
+    const dedupedJobs = dedupeAcrossSources(relevantJobs);
     console.log(
-      `[refresh] ${rawJobs.length} raw jobs total -> ${relevantJobs.length} passed relevance filter`
+      `[refresh] ${rawJobs.length} raw jobs total -> ${relevantJobs.length} passed relevance filter ` +
+        `-> ${dedupedJobs.length} after cross-source dedup`
     );
 
     const idsBySourceId = new Map<RawJob, string>();
-    for (const job of relevantJobs) {
+    for (const job of dedupedJobs) {
       idsBySourceId.set(job, buildJobId(job.source, job.company, job.title));
     }
 
-    const newJobs = relevantJobs.filter((job) => !jobStore.has(idsBySourceId.get(job)!));
+    const newJobs = dedupedJobs.filter((job) => !jobStore.has(idsBySourceId.get(job)!));
 
     if (newJobs.length > 0) {
       const newIds = newJobs.map((job) => idsBySourceId.get(job)!);

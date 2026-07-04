@@ -13,17 +13,40 @@ interface AdzunaJob {
   salary_max?: number;
 }
 
-// Search a few common tech/business role queries since Adzuna requires a
-// keyword rather than offering a browsable category feed like The Muse.
-const QUERIES = ["software engineer", "data analyst", "product manager"];
+interface AdzunaSearchResponse {
+  results?: AdzunaJob[];
+  count?: number;
+}
 
-// Adzuna paginates ~20 results per page; a single page per query was
-// capping this source at ~60 raw jobs total. Pull the first 5 pages per
-// query (up to 100 per query, ~300 total pre-dedup/pre-filter).
-const PAGES_PER_QUERY = 5;
+// Broadened from ["software engineer", "data analyst", "product manager"] -
+// "product manager" rarely matches the title-based relevance filter (see
+// relevanceFilter.ts) so it mostly burned request quota without adding
+// stored jobs. These terms are chosen to actually pass that filter.
+const QUERIES = [
+  "data analyst",
+  "business analyst",
+  "data scientist",
+  "data engineer",
+  "analytics",
+  "business intelligence",
+  "machine learning engineer",
+  "software engineer",
+];
+
 const RESULTS_PER_PAGE = 20;
 
-async function fetchQueryPage(query: string, page: number): Promise<AdzunaJob[]> {
+// Adzuna's docs don't publish a fixed page/rate limit for the free/trial tier
+// behind their login-gated reference, and there's no key configured in this
+// environment to probe it empirically. Rather than hardcode a guessed
+// number, each query paginates adaptively: keep requesting pages until a
+// page comes back short (last page reached) or errors (rate limit / auth
+// issue), capped at MAX_PAGES_PER_QUERY as a safety ceiling. Watch your
+// deploy's logs for "[adzuna] page failed" - if that shows up at a
+// consistent page number, that's your real per-key limit; lower
+// MAX_PAGES_PER_QUERY to stay under it.
+const MAX_PAGES_PER_QUERY = 10;
+
+async function fetchQueryPage(query: string, page: number): Promise<AdzunaSearchResponse> {
   const params = new URLSearchParams({
     app_id: ADZUNA_APP_ID,
     app_key: ADZUNA_APP_KEY,
@@ -39,8 +62,29 @@ async function fetchQueryPage(query: string, page: number): Promise<AdzunaJob[]>
       `Adzuna request failed with status ${response.status} (query="${query}", page=${page})`
     );
   }
-  const data = (await response.json()) as { results?: AdzunaJob[] };
-  return data.results || [];
+  return (await response.json()) as AdzunaSearchResponse;
+}
+
+async function fetchAllPagesForQuery(query: string): Promise<AdzunaJob[]> {
+  const collected: AdzunaJob[] = [];
+
+  for (let page = 1; page <= MAX_PAGES_PER_QUERY; page++) {
+    let data: AdzunaSearchResponse;
+    try {
+      data = await fetchQueryPage(query, page);
+    } catch (error) {
+      console.error(`[adzuna] stopping query="${query}" at page ${page}:`, error);
+      break;
+    }
+
+    const results = data.results || [];
+    collected.push(...results);
+
+    if (results.length < RESULTS_PER_PAGE) break; // last page reached
+    if (data.count != null && collected.length >= data.count) break; // covered all matches
+  }
+
+  return collected;
 }
 
 export async function fetchAdzunaJobs(): Promise<RawJob[]> {
@@ -49,28 +93,18 @@ export async function fetchAdzunaJobs(): Promise<RawJob[]> {
     return [];
   }
 
-  const pageRequests: Array<{ query: string; page: number; promise: Promise<AdzunaJob[]> }> = [];
-  for (const query of QUERIES) {
-    for (let page = 1; page <= PAGES_PER_QUERY; page++) {
-      pageRequests.push({ query, page, promise: fetchQueryPage(query, page) });
-    }
-  }
-
-  const settled = await Promise.allSettled(pageRequests.map((r) => r.promise));
+  const settled = await Promise.allSettled(QUERIES.map(fetchAllPagesForQuery));
 
   const seen = new Set<string>();
   const jobs: RawJob[] = [];
-  let failedPages = 0;
 
   settled.forEach((result, i) => {
     if (result.status === "rejected") {
-      failedPages++;
-      console.error(
-        `[adzuna] page failed (query="${pageRequests[i].query}", page=${pageRequests[i].page}):`,
-        result.reason
-      );
+      console.error(`[adzuna] query="${QUERIES[i]}" failed entirely:`, result.reason);
       return;
     }
+
+    console.log(`[adzuna] query="${QUERIES[i]}": ${result.value.length} raw results`);
 
     for (const job of result.value) {
       if (seen.has(job.id)) continue;
@@ -92,10 +126,7 @@ export async function fetchAdzunaJobs(): Promise<RawJob[]> {
     }
   });
 
-  console.log(
-    `[adzuna] ${jobs.length} unique raw jobs from ${pageRequests.length} page requests ` +
-      `(${QUERIES.length} queries x ${PAGES_PER_QUERY} pages), ${failedPages} page(s) failed`
-  );
+  console.log(`[adzuna] ${jobs.length} unique raw jobs across ${QUERIES.length} queries`);
 
   return jobs;
 }

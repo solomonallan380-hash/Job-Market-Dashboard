@@ -12,6 +12,14 @@ const CATEGORIES = [
   "Business Operations",
 ];
 
+// The Muse's own page_count for these categories runs in the hundreds to
+// thousands (verified live), and 20 concurrent page requests returned with
+// no rate-limiting in testing. Pulling more than a handful of pages per
+// category would mean thousands of raw jobs to fetch/dedupe/filter for
+// marginal benefit, so this is a deliberate cap, not a rate-limit finding -
+// raise it if you want more volume and don't see errors in the logs.
+const PAGES_PER_CATEGORY = 5;
+
 interface MuseJob {
   id: number;
   name: string;
@@ -24,14 +32,33 @@ interface MuseJob {
   company?: { name?: string };
 }
 
-async function fetchCategory(category: string): Promise<MuseJob[]> {
-  const url = `${BASE_URL}?page=0&category=${encodeURIComponent(category)}`;
+async function fetchCategoryPage(category: string, page: number): Promise<MuseJob[]> {
+  const url = `${BASE_URL}?page=${page}&category=${encodeURIComponent(category)}`;
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`The Muse request failed with status ${response.status}`);
+    throw new Error(
+      `The Muse request failed with status ${response.status} (category="${category}", page=${page})`
+    );
   }
   const data = (await response.json()) as { results?: MuseJob[] };
   return data.results || [];
+}
+
+async function fetchCategory(category: string): Promise<MuseJob[]> {
+  const pages = Array.from({ length: PAGES_PER_CATEGORY }, (_, i) => i);
+  const settled = await Promise.allSettled(pages.map((page) => fetchCategoryPage(category, page)));
+
+  const jobs: MuseJob[] = [];
+  settled.forEach((result, page) => {
+    if (result.status === "rejected") {
+      console.error(`[themuse] category="${category}" page ${page} failed:`, result.reason);
+      return;
+    }
+    jobs.push(...result.value);
+  });
+
+  console.log(`[themuse] category="${category}": ${jobs.length} raw results`);
+  return jobs;
 }
 
 export async function fetchTheMuseJobs(): Promise<RawJob[]> {
@@ -64,6 +91,8 @@ export async function fetchTheMuseJobs(): Promise<RawJob[]> {
       });
     }
   }
+
+  console.log(`[themuse] ${jobs.length} unique raw jobs across ${CATEGORIES.length} categories`);
 
   return jobs;
 }
