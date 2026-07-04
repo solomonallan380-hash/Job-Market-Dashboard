@@ -8,6 +8,7 @@ import { buildJobId, jobStore } from "../cache/jobStore.js";
 import { isAdzunaConfigured, isClaudeConfigured } from "../config.js";
 import { filterRelevantJobs } from "../filters/relevanceFilter.js";
 import { fixJobTextEncoding } from "../utils/textEncoding.js";
+import { inferWorkMode } from "../enrichment/workMode.js";
 import type { EnrichedJob, IntegrationStatus, RawJob } from "../types.js";
 
 export const jobsRouter = Router();
@@ -94,6 +95,7 @@ jobsRouter.post("/jobs/refresh", async (_req, res) => {
           extractedSkills: enriched?.extractedSkills ?? [],
           enrichedByClaude: isClaudeConfigured,
           fetchedAt: now,
+          workMode: inferWorkMode(job.title, job.description),
         };
 
         jobStore.upsert(enrichedJob);

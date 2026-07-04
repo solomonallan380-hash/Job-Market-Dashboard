@@ -1,5 +1,5 @@
 import type { Filters, RoleType } from "../hooks/useJobs";
-import type { ExperienceLevel } from "../types";
+import type { ExperienceLevel, WorkMode } from "../types";
 
 interface FilterPanelProps {
   filters: Filters;
@@ -9,6 +9,7 @@ interface FilterPanelProps {
 
 const ROLE_TYPES: RoleType[] = ["Engineering", "Data & Analytics", "Design", "Product", "Business", "Other"];
 const EXPERIENCE_LEVELS: ExperienceLevel[] = ["entry", "mid", "senior", "unknown"];
+const WORK_MODES: WorkMode[] = ["remote", "hybrid", "onsite"];
 
 function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
@@ -78,6 +79,25 @@ export function FilterPanel({ filters, setFilters, allSkills }: FilterPanelProps
               }`}
             >
               {level}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Work Mode</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {WORK_MODES.map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setFilters((prev) => ({ ...prev, workModes: toggle(prev.workModes, mode) }))}
+              className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize transition ${
+                filters.workModes.includes(mode)
+                  ? "bg-brand-600 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {mode}
             </button>
           ))}
         </div>

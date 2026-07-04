@@ -1,5 +1,6 @@
 export type JobSource = "remoteok" | "adzuna" | "themuse";
 export type ExperienceLevel = "entry" | "mid" | "senior" | "unknown";
+export type WorkMode = "remote" | "hybrid" | "onsite";
 
 export interface Job {
   id: string;
@@ -22,6 +23,7 @@ export interface Job {
   enrichedByClaude: boolean;
   fetchedAt: string;
   matchScore: number | null;
+  workMode: WorkMode;
 }
 
 export interface JobsResponse {

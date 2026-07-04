@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchJobs, fetchStatus, refreshJobs } from "../api/client";
-import type { ExperienceLevel, IntegrationStatus, Job } from "../types";
+import type { ExperienceLevel, IntegrationStatus, Job, WorkMode } from "../types";
 
 export type RoleType = "Engineering" | "Data & Analytics" | "Design" | "Product" | "Business" | "Other";
 
@@ -23,6 +23,7 @@ export interface Filters {
   search: string;
   roleTypes: RoleType[];
   experienceLevels: ExperienceLevel[];
+  workModes: WorkMode[];
   minSalary: number;
   skills: string[];
   userSkills: string;
@@ -33,6 +34,7 @@ const DEFAULT_FILTERS: Filters = {
   search: "",
   roleTypes: [],
   experienceLevels: [],
+  workModes: [],
   minSalary: 0,
   skills: [],
   userSkills: "",
@@ -106,6 +108,9 @@ export function useJobs() {
         return false;
       }
       if (filters.experienceLevels.length > 0 && !filters.experienceLevels.includes(job.experienceLevel)) {
+        return false;
+      }
+      if (filters.workModes.length > 0 && !filters.workModes.includes(job.workMode)) {
         return false;
       }
       const salary = job.salaryMax ?? job.salaryMin ?? 0;

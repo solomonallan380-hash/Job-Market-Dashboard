@@ -2,6 +2,8 @@ export type JobSource = "remoteok" | "adzuna" | "themuse";
 
 export type ExperienceLevel = "entry" | "mid" | "senior" | "unknown";
 
+export type WorkMode = "remote" | "hybrid" | "onsite";
+
 export interface RawJob {
   sourceId: string;
   source: JobSource;
@@ -26,6 +28,7 @@ export interface EnrichedJob extends RawJob {
   extractedSkills: string[];
   enrichedByClaude: boolean;
   fetchedAt: string;
+  workMode: WorkMode;
 }
 
 export interface IntegrationStatus {
