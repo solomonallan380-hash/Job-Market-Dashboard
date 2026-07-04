@@ -6,6 +6,8 @@ import { enrichJobs } from "../enrichment/claude.js";
 import { computeMatchScore } from "../scoring/matchScore.js";
 import { buildJobId, jobStore } from "../cache/jobStore.js";
 import { isAdzunaConfigured, isClaudeConfigured } from "../config.js";
+import { filterRelevantJobs } from "../filters/relevanceFilter.js";
+import { fixJobTextEncoding } from "../utils/textEncoding.js";
 import type { EnrichedJob, IntegrationStatus, RawJob } from "../types.js";
 
 export const jobsRouter = Router();
@@ -59,12 +61,18 @@ jobsRouter.post("/jobs/refresh", async (_req, res) => {
       }
     });
 
+    // Repair any mojibake in upstream text fields, then drop postings that
+    // aren't relevant to a data/analytics job dashboard, before anything
+    // is deduplicated, enriched, or stored.
+    const cleanedJobs = rawJobs.map(fixJobTextEncoding);
+    const relevantJobs = filterRelevantJobs(cleanedJobs);
+
     const idsBySourceId = new Map<RawJob, string>();
-    for (const job of rawJobs) {
+    for (const job of relevantJobs) {
       idsBySourceId.set(job, buildJobId(job.source, job.company, job.title));
     }
 
-    const newJobs = rawJobs.filter((job) => !jobStore.has(idsBySourceId.get(job)!));
+    const newJobs = relevantJobs.filter((job) => !jobStore.has(idsBySourceId.get(job)!));
 
     if (newJobs.length > 0) {
       const newIds = newJobs.map((job) => idsBySourceId.get(job)!);
